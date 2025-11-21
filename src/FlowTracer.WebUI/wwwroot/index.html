@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔍 ApiFlowTracer Dashboard</title>
+    <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="dashboard-header">
+        <div class="header-left">
+            <h1>🔍 ApiFlowTracer Dashboard</h1>
+            <div class="connection-status" id="connectionStatus">
+                <span class="status-indicator" id="statusIndicator"></span>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </div>
+        <div class="header-right">
+            <button class="btn btn-secondary" id="toggleTheme" title="Toggle dark mode">
+                <span id="themeIcon">🌙</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Statistics Cards -->
+    <section class="stats-section">
+        <div class="stat-card">
+            <div class="stat-icon">📊</div>
+            <div class="stat-content">
+                <div class="stat-value" id="totalTraces">0</div>
+                <div class="stat-label">Total Traces</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">🌐</div>
+            <div class="stat-content">
+                <div class="stat-value" id="httpCalls">0</div>
+                <div class="stat-label">HTTP Calls</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">🗄️</div>
+            <div class="stat-content">
+                <div class="stat-value" id="dbQueries">0</div>
+                <div class="stat-label">DB Queries</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">⏱️</div>
+            <div class="stat-content">
+                <div class="stat-value" id="avgDuration">0ms</div>
+                <div class="stat-label">Avg Duration</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Actions and Filters -->
+    <section class="controls-section">
+        <div class="controls-left">
+            <button class="btn btn-primary" id="exportBtn" title="Export traces to JSON">
+                📥 Export JSON
+            </button>
+            <button class="btn btn-warning" id="clearBtn" title="Clear all traces">
+                🗑️ Clear All
+            </button>
+            <button class="btn btn-secondary" id="pauseBtn" title="Pause/Resume auto-scroll">
+                <span id="pauseIcon">⏸️</span> <span id="pauseText">Pause</span>
+            </button>
+        </div>
+        <div class="controls-right">
+            <input type="text" id="searchInput" placeholder="🔍 Search traces..." class="search-input">
+            <select id="typeFilter" class="filter-select">
+                <option value="all">All Types</option>
+                <option value="http">HTTP Only</option>
+                <option value="database">Database Only</option>
+            </select>
+            <select id="correlationFilter" class="filter-select">
+                <option value="all">All Correlations</option>
+            </select>
+            <select id="timeFilter" class="filter-select">
+                <option value="all">All Time</option>
+                <option value="60">Last 1 min</option>
+                <option value="300">Last 5 min</option>
+                <option value="900">Last 15 min</option>
+                <option value="3600">Last 1 hour</option>
+            </select>
+        </div>
+    </section>
+
+    <!-- Trace List -->
+    <section class="traces-section">
+        <div id="emptyState" class="empty-state">
+            <div class="empty-icon">📭</div>
+            <h3>No Traces Yet</h3>
+            <p>Waiting for HTTP calls and database queries to appear...</p>
+        </div>
+        <div id="tracesList" class="traces-list"></div>
+    </section>
+
+    <!-- Detail Modal -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Trace Details</h2>
+                <button class="modal-close" id="closeModal">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Dynamic content will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- SignalR -->
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.0/dist/browser/signalr.min.js"></script>
+    <script src="/js/dashboard.js"></script>
+</body>
+</html>
