@@ -31,8 +31,15 @@ public sealed class HttpTracingHandler : DelegatingHandler
 
         if (_settings.CapturePayloads && request.Content != null)
         {
-            var requestData = await ExtractContent(request.Content, token);
-            httpInfo = httpInfo with { RequestBody = requestData };
+            var requestBody = await ExtractContent(request.Content, token);
+            httpInfo = new HttpTrace
+            {
+                Method = httpInfo.Method,
+                Url = httpInfo.Url,
+                RequestHeaders = httpInfo.RequestHeaders,
+                QueryParams = httpInfo.QueryParams,
+                RequestBody = requestBody
+            };
         }
 
         var traceRecord = new TraceEntry
@@ -47,15 +54,12 @@ public sealed class HttpTracingHandler : DelegatingHandler
         try
         {
             responseMessage = await base.SendAsync(request, token);
-            httpInfo = httpInfo with { StatusCode = (int)responseMessage.StatusCode };
+            httpInfo.StatusCode = (int)responseMessage.StatusCode;
 
             if (_settings.CapturePayloads && responseMessage.Content != null)
             {
-                var responseData = await ExtractContent(responseMessage.Content, token);
-                httpInfo = httpInfo with { ResponseBody = responseData };
+                httpInfo.ResponseBody = await ExtractContent(responseMessage.Content, token);
             }
-
-            traceRecord = traceRecord with { Http = httpInfo };
         }
         catch (Exception error)
         {
@@ -65,7 +69,7 @@ public sealed class HttpTracingHandler : DelegatingHandler
         finally
         {
             timer.Stop();
-            traceRecord = traceRecord with { DurationMs = timer.ElapsedMilliseconds };
+            traceRecord.DurationMs = timer.ElapsedMilliseconds;
             _traceCollector.Record(traceRecord);
         }
 
