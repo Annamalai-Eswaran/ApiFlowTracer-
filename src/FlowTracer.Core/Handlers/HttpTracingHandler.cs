@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using FlowTracer.Core.Models;
 using FlowTracer.Core.Services;
 
@@ -7,95 +6,158 @@ namespace FlowTracer.Core.Handlers;
 
 public sealed class HttpTracingHandler : DelegatingHandler
 {
-    private readonly TraceCollector _collector;
+    private readonly TraceCollector _traceCollector;
     private readonly CorrelationTracker _correlationTracker;
-    private readonly TracerOptions _options;
+    private readonly TracerOptions _settings;
 
-    public HttpTracingHandler(TraceCollector collector, CorrelationTracker correlationTracker, TracerOptions options)
+    public HttpTracingHandler(TraceCollector traceCollector, CorrelationTracker correlationTracker, TracerOptions settings)
     {
-        _collector = collector;
+        _traceCollector = traceCollector;
         _correlationTracker = correlationTracker;
-        _options = options;
+        _settings = settings;
     }
 
-    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
     {
-        if (!_options.TrackHttp) return await base.SendAsync(request, cancellationToken);
-        
-        var url = request.RequestUri?.ToString() ?? string.Empty;
-        if (_options.IgnoreUrls.Any(p => url.Contains(p, StringComparison.OrdinalIgnoreCase)))
-            return await base.SendAsync(request, cancellationToken);
+        if (!_settings.TrackHttp) 
+            return await base.SendAsync(request, token);
 
-        var sw = Stopwatch.StartNew();
-        var httpTrace = new HttpTrace
+        var requestUrl = request.RequestUri?.AbsoluteUri ?? "unknown";
+        if (IsUrlIgnored(requestUrl))
+            return await base.SendAsync(request, token);
+
+        var timer = Stopwatch.StartNew();
+        var httpInfo = CreateHttpTraceInfo(request);
+
+        if (_settings.CapturePayloads && request.Content != null)
         {
-            Method = request.Method.ToString(),
-            Url = url,
-            RequestHeaders = request.Headers.ToDictionary(h => h.Key, h => string.Join(", ", h.Value))
-        };
-
-        if (_options.CapturePayloads && request.Content != null)
-            httpTrace = httpTrace with { RequestBody = await SafeReadContent(request.Content, cancellationToken) };
-
-        if (request.RequestUri?.Query != null)
-        {
-            var queryParams = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query);
-            foreach (string key in queryParams)
-                httpTrace.QueryParams[key] = queryParams[key] ?? string.Empty;
+            var requestData = await ExtractContent(request.Content, token);
+            httpInfo = httpInfo with { RequestBody = requestData };
         }
 
-        var trace = new TraceEntry
+        var traceRecord = new TraceEntry
         {
             Kind = TraceKind.HttpRequest,
             CorrelationId = _correlationTracker.GetOrCreate(),
-            Location = GetCodeLocation(),
-            Http = httpTrace
+            Location = BuildCodeLocation(),
+            Http = httpInfo
         };
 
+        HttpResponseMessage responseMessage;
         try
         {
-            var response = await base.SendAsync(request, cancellationToken);
-            httpTrace = httpTrace with { StatusCode = (int)response.StatusCode };
-            if (_options.CapturePayloads && response.Content != null)
-                httpTrace = httpTrace with { ResponseBody = await SafeReadContent(response.Content, cancellationToken) };
-            trace = trace with { Http = httpTrace };
-            return response;
+            responseMessage = await base.SendAsync(request, token);
+            httpInfo = httpInfo with { StatusCode = (int)responseMessage.StatusCode };
+
+            if (_settings.CapturePayloads && responseMessage.Content != null)
+            {
+                var responseData = await ExtractContent(responseMessage.Content, token);
+                httpInfo = httpInfo with { ResponseBody = responseData };
+            }
+
+            traceRecord = traceRecord with { Http = httpInfo };
         }
-        catch (Exception ex)
+        catch (Exception error)
         {
-            trace.Metadata["Error"] = ex.Message;
+            traceRecord.Metadata["Exception"] = error.Message;
             throw;
         }
         finally
         {
-            sw.Stop();
-            trace = trace with { DurationMs = sw.ElapsedMilliseconds };
-            _collector.Record(trace);
+            timer.Stop();
+            traceRecord = traceRecord with { DurationMs = timer.ElapsedMilliseconds };
+            _traceCollector.Record(traceRecord);
         }
+
+        return responseMessage;
     }
 
-    private async Task<string> SafeReadContent(HttpContent content, CancellationToken ct)
+    private bool IsUrlIgnored(string url)
+    {
+        foreach (var pattern in _settings.IgnoreUrls)
+        {
+            if (url.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    private HttpTrace CreateHttpTraceInfo(HttpRequestMessage request)
+    {
+        var headers = new Dictionary<string, string>();
+        foreach (var header in request.Headers)
+        {
+            headers[header.Key] = string.Join(", ", header.Value);
+        }
+
+        var queryData = new Dictionary<string, string>();
+        if (request.RequestUri?.Query != null)
+        {
+            var parsedQuery = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query);
+            foreach (string key in parsedQuery)
+            {
+                queryData[key] = parsedQuery[key] ?? string.Empty;
+            }
+        }
+
+        return new HttpTrace
+        {
+            Method = request.Method.Method,
+            Url = request.RequestUri?.AbsoluteUri ?? string.Empty,
+            RequestHeaders = headers,
+            QueryParams = queryData
+        };
+    }
+
+    private async Task<string> ExtractContent(HttpContent content, CancellationToken token)
     {
         try
         {
-            var body = await content.ReadAsStringAsync(ct);
-            var max = _options.MaxPayloadKb * 1024;
-            return body.Length > max ? body[..max] + "...[truncated]" : body;
+            var text = await content.ReadAsStringAsync(token);
+            var maxSize = _settings.MaxPayloadKb * 1024;
+            
+            if (text.Length > maxSize)
+            {
+                return text.Substring(0, maxSize) + " ...CONTENT_TRUNCATED";
+            }
+            
+            return text;
         }
-        catch { return "[unreadable]"; }
+        catch
+        {
+            return "CONTENT_READ_ERROR";
+        }
     }
 
-    private CodeLocation GetCodeLocation([CallerFilePath] string file = "", [CallerLineNumber] int line = 0, [CallerMemberName] string member = "")
+    private CodeLocation BuildCodeLocation()
     {
-        var st = new StackTrace(true);
-        var frame = st.GetFrames()?.FirstOrDefault(f => !(f.GetMethod()?.DeclaringType?.Namespace?.StartsWith("FlowTracer") ?? false));
-        return new CodeLocation
+        var stack = new StackTrace(true);
+        var frames = stack.GetFrames();
+        
+        if (frames == null)
         {
-            FilePath = frame?.GetFileName() ?? file,
-            LineNumber = frame?.GetFileLineNumber() ?? line,
-            MethodName = frame?.GetMethod()?.Name ?? member,
-            ClassName = frame?.GetMethod()?.DeclaringType?.Name ?? "",
-            StackTrace = _options.CaptureStackTraces ? st.ToString() : ""
-        };
+            return new CodeLocation();
+        }
+
+        foreach (var frame in frames)
+        {
+            var method = frame.GetMethod();
+            var declType = method?.DeclaringType;
+            var namespaceName = declType?.Namespace ?? string.Empty;
+
+            if (!namespaceName.StartsWith("FlowTracer") && !namespaceName.StartsWith("System"))
+            {
+                return new CodeLocation
+                {
+                    FilePath = frame.GetFileName() ?? "unknown",
+                    LineNumber = frame.GetFileLineNumber(),
+                    MethodName = method?.Name ?? "unknown",
+                    ClassName = declType?.Name ?? "unknown",
+                    StackTrace = _settings.CaptureStackTraces ? stack.ToString() : string.Empty
+                };
+            }
+        }
+
+        return new CodeLocation();
     }
 }
