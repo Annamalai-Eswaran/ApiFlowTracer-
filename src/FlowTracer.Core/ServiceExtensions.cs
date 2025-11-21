@@ -75,14 +75,22 @@ public static class ServiceExtensions
             return app;
         }
 
-        Console.WriteLine("🔍 ApiFlowTracer: Starting...");
+        Console.WriteLine("🔍 ApiFlowTracer: Starting dashboard...");
 
-        // Auto-start dashboard web server
+        // Start the real dashboard server
         Task.Run(async () =>
         {
             try
             {
-                await StartDashboardServer(options, collector);
+                var server = new DashboardServer(options, collector);
+                await server.StartAsync();
+                Console.WriteLine($"✅ ApiFlowTracer: Dashboard running at http://localhost:{options.DashboardPort}");
+                
+                if (options.OpenBrowserOnStart)
+                {
+                    await Task.Delay(1000); // Wait for server to be ready
+                    OpenBrowser($"http://localhost:{options.DashboardPort}");
+                }
             }
             catch (Exception ex)
             {
@@ -90,74 +98,7 @@ public static class ServiceExtensions
             }
         });
 
-        // Auto-open browser if configured
-        if (options.OpenBrowserOnStart)
-        {
-            Task.Run(async () =>
-            {
-                // Wait a moment for server to start
-                await Task.Delay(1500);
-                OpenBrowser($"http://localhost:{options.DashboardPort}");
-            });
-        }
-
-        Console.WriteLine($"✅ ApiFlowTracer: Dashboard available at http://localhost:{options.DashboardPort}");
-        Console.WriteLine("📊 ApiFlowTracer: Tracking HTTP calls and database queries");
-
         return app;
-    }
-
-    private static async Task StartDashboardServer(TracerOptions options, TraceCollector collector)
-    {
-        // Try to find WebUI assembly - first check if already loaded
-        var webUiAssembly = AppDomain.CurrentDomain.GetAssemblies()
-            .FirstOrDefault(a => a.GetName().Name == "FlowTracer.WebUI");
-        
-        // If not loaded, try to load it from the same directory as the Core assembly
-        if (webUiAssembly == null)
-        {
-            try
-            {
-                var coreAssemblyPath = typeof(ServiceExtensions).Assembly.Location;
-                var coreDirectory = Path.GetDirectoryName(coreAssemblyPath);
-                if (!string.IsNullOrEmpty(coreDirectory))
-                {
-                    var webUiPath = Path.Combine(coreDirectory, "FlowTracer.WebUI.dll");
-                    // Validate file exists and is in expected directory before loading
-                    if (File.Exists(webUiPath) && 
-                        Path.GetFullPath(webUiPath).StartsWith(Path.GetFullPath(coreDirectory), StringComparison.OrdinalIgnoreCase))
-                    {
-                        webUiAssembly = System.Reflection.Assembly.LoadFrom(webUiPath);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"⚠️  ApiFlowTracer: Failed to load WebUI assembly - {ex.Message}");
-                return;
-            }
-        }
-        
-        if (webUiAssembly == null)
-        {
-            Console.WriteLine("⚠️  ApiFlowTracer: WebUI assembly not found. Dashboard will not be available.");
-            return;
-        }
-
-        var dashboardServerType = webUiAssembly.GetType("FlowTracer.WebUI.DashboardServer");
-        if (dashboardServerType == null)
-        {
-            Console.WriteLine("⚠️  ApiFlowTracer: DashboardServer type not found.");
-            return;
-        }
-
-        var server = Activator.CreateInstance(dashboardServerType, options, collector);
-        var startMethod = dashboardServerType.GetMethod("StartAsync");
-        
-        if (startMethod != null && server != null)
-        {
-            await (Task)startMethod.Invoke(server, null)!;
-        }
     }
 
     private static void OpenBrowser(string url)
