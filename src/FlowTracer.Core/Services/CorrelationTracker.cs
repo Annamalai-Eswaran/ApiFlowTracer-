@@ -27,6 +27,6 @@ public sealed class CorrelationTracker
 
     public void Clear()
     {
-        _correlationId.Value = null;
+        _correlationId.Value = null!;
     }
 }
