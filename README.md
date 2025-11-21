@@ -37,12 +37,12 @@ using FlowTracer.Core;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add FlowTracer services
-builder.Services.AddFlowTracer();
+builder.Services.AddApiFlowTracer();
 
 var app = builder.Build();
 
 // Enable FlowTracer middleware
-app.UseFlowTracer();
+app.UseApiFlowTracer();
 
 app.Run();
 ```
@@ -76,7 +76,7 @@ The dashboard shows a live feed of all operations:
 Customize behavior with options:
 
 ```csharp
-builder.Services.AddFlowTracer(config =>
+builder.Services.AddApiFlowTracer(config =>
 {
     config.DashboardPort = 5050;
     config.TrackHttp = true;

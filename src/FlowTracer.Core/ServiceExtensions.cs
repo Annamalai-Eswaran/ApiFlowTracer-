@@ -44,9 +44,7 @@ public static class ServiceExtensions
             httpClientOptions.HttpMessageHandlerBuilderActions.Add(builder =>
             {
                 // Create handler instance with DI
-                var handler = ActivatorUtilities.CreateInstance<HttpTracingHandler>(
-                    builder.Services,
-                    Array.Empty<object>());
+                var handler = ActivatorUtilities.CreateInstance<HttpTracingHandler>(builder.Services);
 
                 // Set the inner handler
                 handler.InnerHandler = builder.PrimaryHandler;

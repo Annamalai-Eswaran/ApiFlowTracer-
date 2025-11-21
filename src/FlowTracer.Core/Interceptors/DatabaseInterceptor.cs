@@ -240,12 +240,9 @@ public sealed class DatabaseInterceptor : DbCommandInterceptor
     {
         var parameters = new Dictionary<string, object?>();
 
-        if (command.Parameters != null)
+        foreach (DbParameter param in command.Parameters)
         {
-            foreach (DbParameter param in command.Parameters)
-            {
-                parameters[param.ParameterName] = param.Value;
-            }
+            parameters[param.ParameterName] = param.Value;
         }
 
         return parameters;
