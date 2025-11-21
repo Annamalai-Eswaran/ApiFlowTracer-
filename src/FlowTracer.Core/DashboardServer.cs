@@ -117,7 +117,17 @@ public sealed class DashboardServer : IDisposable
     public void Dispose()
     {
         _cts?.Cancel();
-        _app?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        if (_app != null)
+        {
+            try
+            {
+                _app.DisposeAsync().AsTask().ConfigureAwait(false).GetAwaiter().GetResult();
+            }
+            catch (Exception)
+            {
+                // Ignore disposal errors
+            }
+        }
         _cts?.Dispose();
     }
 
