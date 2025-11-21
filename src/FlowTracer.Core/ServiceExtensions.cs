@@ -65,6 +65,7 @@ public static class ServiceExtensions
     public static IApplicationBuilder UseApiFlowTracer(this IApplicationBuilder app)
     {
         var options = app.ApplicationServices.GetRequiredService<TracerOptions>();
+        var collector = app.ApplicationServices.GetRequiredService<TraceCollector>();
         var env = app.ApplicationServices.GetService<IHostEnvironment>();
 
         // Check if should run in production
@@ -81,7 +82,7 @@ public static class ServiceExtensions
         {
             try
             {
-                await StartDashboardServer(options);
+                await StartDashboardServer(options, collector);
             }
             catch (Exception ex)
             {
@@ -106,15 +107,55 @@ public static class ServiceExtensions
         return app;
     }
 
-    private static async Task StartDashboardServer(TracerOptions options)
+    private static async Task StartDashboardServer(TracerOptions options, TraceCollector collector)
     {
-        // Placeholder for dashboard server startup
-        // In a complete implementation, this would start a minimal web server
-        // to serve the dashboard UI on the configured port
-        await Task.Delay(100); // Simulate startup
+        // Try to find WebUI assembly - first check if already loaded
+        var webUiAssembly = AppDomain.CurrentDomain.GetAssemblies()
+            .FirstOrDefault(a => a.GetName().Name == "FlowTracer.WebUI");
         
-        // TODO: Implement actual dashboard server
-        // This would typically use Kestrel to serve static files and WebSocket for real-time updates
+        // If not loaded, try to load it from the same directory as the Core assembly
+        if (webUiAssembly == null)
+        {
+            try
+            {
+                var coreAssemblyPath = typeof(ServiceExtensions).Assembly.Location;
+                var coreDirectory = Path.GetDirectoryName(coreAssemblyPath);
+                if (!string.IsNullOrEmpty(coreDirectory))
+                {
+                    var webUiPath = Path.Combine(coreDirectory, "FlowTracer.WebUI.dll");
+                    if (File.Exists(webUiPath))
+                    {
+                        webUiAssembly = System.Reflection.Assembly.LoadFrom(webUiPath);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"⚠️  ApiFlowTracer: Failed to load WebUI assembly - {ex.Message}");
+                return;
+            }
+        }
+        
+        if (webUiAssembly == null)
+        {
+            Console.WriteLine("⚠️  ApiFlowTracer: WebUI assembly not found. Dashboard will not be available.");
+            return;
+        }
+
+        var dashboardServerType = webUiAssembly.GetType("FlowTracer.WebUI.DashboardServer");
+        if (dashboardServerType == null)
+        {
+            Console.WriteLine("⚠️  ApiFlowTracer: DashboardServer type not found.");
+            return;
+        }
+
+        var server = Activator.CreateInstance(dashboardServerType, options, collector);
+        var startMethod = dashboardServerType.GetMethod("StartAsync");
+        
+        if (startMethod != null && server != null)
+        {
+            await (Task)startMethod.Invoke(server, null)!;
+        }
     }
 
     private static void OpenBrowser(string url)
