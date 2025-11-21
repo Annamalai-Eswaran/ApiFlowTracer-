@@ -123,7 +123,9 @@ public static class ServiceExtensions
                 if (!string.IsNullOrEmpty(coreDirectory))
                 {
                     var webUiPath = Path.Combine(coreDirectory, "FlowTracer.WebUI.dll");
-                    if (File.Exists(webUiPath))
+                    // Validate file exists and is in expected directory before loading
+                    if (File.Exists(webUiPath) && 
+                        Path.GetFullPath(webUiPath).StartsWith(Path.GetFullPath(coreDirectory), StringComparison.OrdinalIgnoreCase))
                     {
                         webUiAssembly = System.Reflection.Assembly.LoadFrom(webUiPath);
                     }

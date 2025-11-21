@@ -304,57 +304,132 @@ function showTraceDetails(trace) {
     const isHttp = trace.kind === 0;
     modalTitle.textContent = isHttp ? '🌐 HTTP Request Details' : '🗄️ Database Query Details';
     
-    let detailsHtml = `
-        <div style="margin-bottom: 1.5rem;">
-            <h3 style="margin-bottom: 0.5rem;">Basic Info</h3>
-            <p><strong>Sequence:</strong> #${trace.sequenceNumber}</p>
-            <p><strong>Timestamp:</strong> ${new Date(trace.timestampUtc).toLocaleString()}</p>
-            <p><strong>Duration:</strong> ${trace.durationMs}ms</p>
-            <p><strong>Correlation ID:</strong> ${trace.correlationId}</p>
-            ${trace.location ? `<p><strong>Code Location:</strong> ${escapeHtml(trace.location.filePath)}:${trace.location.lineNumber} <button class="copy-btn" onclick="copyToClipboard('${escapeHtml(trace.location.filePath)}:${trace.location.lineNumber}')">Copy</button></p>` : ''}
-        </div>
+    // Clear modal body
+    modalBody.innerHTML = '';
+    
+    // Create elements using DOM manipulation to avoid XSS
+    const createSection = (title, content) => {
+        const section = document.createElement('div');
+        section.style.marginBottom = '1.5rem';
+        
+        const h3 = document.createElement('h3');
+        h3.style.marginBottom = '0.5rem';
+        h3.textContent = title;
+        section.appendChild(h3);
+        
+        section.appendChild(content);
+        return section;
+    };
+    
+    const createCopyButton = (textToCopy) => {
+        const btn = document.createElement('button');
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.addEventListener('click', () => copyToClipboard(textToCopy));
+        return btn;
+    };
+    
+    // Basic Info
+    const basicInfo = document.createElement('div');
+    basicInfo.innerHTML = `
+        <p><strong>Sequence:</strong> #${trace.sequenceNumber}</p>
+        <p><strong>Timestamp:</strong> ${new Date(trace.timestampUtc).toLocaleString()}</p>
+        <p><strong>Duration:</strong> ${trace.durationMs}ms</p>
+        <p><strong>Correlation ID:</strong> ${escapeHtml(trace.correlationId)}</p>
     `;
+    if (trace.location) {
+        const locationP = document.createElement('p');
+        locationP.innerHTML = `<strong>Code Location:</strong> `;
+        const locationText = document.createTextNode(`${trace.location.filePath}:${trace.location.lineNumber} `);
+        locationP.appendChild(locationText);
+        locationP.appendChild(createCopyButton(`${trace.location.filePath}:${trace.location.lineNumber}`));
+        basicInfo.appendChild(locationP);
+    }
+    modalBody.appendChild(createSection('Basic Info', basicInfo));
     
     if (isHttp && trace.http) {
-        detailsHtml += `
-            <div style="margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 0.5rem;">HTTP Details</h3>
-                <p><strong>Method:</strong> ${trace.http.method}</p>
-                <p><strong>URL:</strong> ${escapeHtml(trace.http.url)} <button class="copy-btn" onclick="copyToClipboard('${escapeHtml(trace.http.url)}')">Copy</button></p>
-                <p><strong>Status Code:</strong> ${trace.http.statusCode}</p>
-            </div>
-            ${trace.http.requestBody ? `
-            <div style="margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 0.5rem;">Request Body <button class="copy-btn" onclick="copyToClipboard('${escapeHtml(trace.http.requestBody)}')">Copy</button></h3>
-                <pre class="json-content">${formatJson(trace.http.requestBody)}</pre>
-            </div>` : ''}
-            ${trace.http.responseBody ? `
-            <div style="margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 0.5rem;">Response Body <button class="copy-btn" onclick="copyToClipboard('${escapeHtml(trace.http.responseBody)}')">Copy</button></h3>
-                <pre class="json-content">${formatJson(trace.http.responseBody)}</pre>
-            </div>` : ''}
+        const httpInfo = document.createElement('div');
+        httpInfo.innerHTML = `
+            <p><strong>Method:</strong> ${escapeHtml(trace.http.method)}</p>
+            <p><strong>Status Code:</strong> ${trace.http.statusCode}</p>
         `;
+        const urlP = document.createElement('p');
+        urlP.innerHTML = '<strong>URL:</strong> ';
+        const urlText = document.createTextNode(trace.http.url + ' ');
+        urlP.appendChild(urlText);
+        urlP.appendChild(createCopyButton(trace.http.url));
+        httpInfo.appendChild(urlP);
+        modalBody.appendChild(createSection('HTTP Details', httpInfo));
+        
+        if (trace.http.requestBody) {
+            const reqHeader = document.createElement('div');
+            reqHeader.appendChild(document.createTextNode('Request Body '));
+            reqHeader.appendChild(createCopyButton(trace.http.requestBody));
+            const reqPre = document.createElement('pre');
+            reqPre.className = 'json-content';
+            reqPre.textContent = formatJsonText(trace.http.requestBody);
+            const reqBody = document.createElement('div');
+            reqBody.appendChild(reqPre);
+            const reqSection = createSection('', reqBody);
+            reqSection.querySelector('h3').remove();
+            reqSection.insertBefore(reqHeader, reqSection.firstChild);
+            const h3 = document.createElement('h3');
+            h3.style.marginBottom = '0.5rem';
+            h3.appendChild(reqHeader);
+            reqSection.insertBefore(h3, reqSection.firstChild);
+            modalBody.appendChild(reqSection);
+        }
+        
+        if (trace.http.responseBody) {
+            const resHeader = document.createElement('div');
+            resHeader.appendChild(document.createTextNode('Response Body '));
+            resHeader.appendChild(createCopyButton(trace.http.responseBody));
+            const resPre = document.createElement('pre');
+            resPre.className = 'json-content';
+            resPre.textContent = formatJsonText(trace.http.responseBody);
+            const resBody = document.createElement('div');
+            resBody.appendChild(resPre);
+            const resSection = createSection('', resBody);
+            resSection.querySelector('h3').remove();
+            const h3 = document.createElement('h3');
+            h3.style.marginBottom = '0.5rem';
+            h3.appendChild(resHeader);
+            resSection.insertBefore(h3, resSection.firstChild);
+            modalBody.appendChild(resSection);
+        }
     } else if (trace.database) {
-        detailsHtml += `
-            <div style="margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 0.5rem;">Database Details</h3>
-                <p><strong>Query Type:</strong> ${getQueryKind(trace.database.kind)}</p>
-                <p><strong>Rows Affected:</strong> ${trace.database.rowsAffected ?? 'N/A'}</p>
-                ${trace.database.databaseName ? `<p><strong>Database:</strong> ${trace.database.databaseName}</p>` : ''}
-            </div>
-            <div style="margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 0.5rem;">SQL Query <button class="copy-btn" onclick="copyToClipboard('${escapeHtml(trace.database.sqlQuery)}')">Copy</button></h3>
-                <pre class="sql-query">${escapeHtml(trace.database.sqlQuery)}</pre>
-            </div>
-            ${Object.keys(trace.database.parameters).length > 0 ? `
-            <div style="margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 0.5rem;">Parameters</h3>
-                <pre class="db-params">${JSON.stringify(trace.database.parameters, null, 2)}</pre>
-            </div>` : ''}
+        const dbInfo = document.createElement('div');
+        dbInfo.innerHTML = `
+            <p><strong>Query Type:</strong> ${getQueryKind(trace.database.kind)}</p>
+            <p><strong>Rows Affected:</strong> ${trace.database.rowsAffected ?? 'N/A'}</p>
+            ${trace.database.databaseName ? `<p><strong>Database:</strong> ${escapeHtml(trace.database.databaseName)}</p>` : ''}
         `;
+        modalBody.appendChild(createSection('Database Details', dbInfo));
+        
+        const sqlHeader = document.createElement('div');
+        sqlHeader.appendChild(document.createTextNode('SQL Query '));
+        sqlHeader.appendChild(createCopyButton(trace.database.sqlQuery));
+        const sqlPre = document.createElement('pre');
+        sqlPre.className = 'sql-query';
+        sqlPre.textContent = trace.database.sqlQuery;
+        const sqlBody = document.createElement('div');
+        sqlBody.appendChild(sqlPre);
+        const sqlSection = createSection('', sqlBody);
+        sqlSection.querySelector('h3').remove();
+        const h3 = document.createElement('h3');
+        h3.style.marginBottom = '0.5rem';
+        h3.appendChild(sqlHeader);
+        sqlSection.insertBefore(h3, sqlSection.firstChild);
+        modalBody.appendChild(sqlSection);
+        
+        if (Object.keys(trace.database.parameters).length > 0) {
+            const paramPre = document.createElement('pre');
+            paramPre.className = 'db-params';
+            paramPre.textContent = JSON.stringify(trace.database.parameters, null, 2);
+            modalBody.appendChild(createSection('Parameters', paramPre));
+        }
     }
     
-    modalBody.innerHTML = detailsHtml;
     modal.classList.add('show');
 }
 
@@ -506,6 +581,15 @@ function formatJson(str) {
         return escapeHtml(JSON.stringify(obj, null, 2));
     } catch {
         return escapeHtml(str);
+    }
+}
+
+function formatJsonText(str) {
+    try {
+        const obj = JSON.parse(str);
+        return JSON.stringify(obj, null, 2);
+    } catch {
+        return str;
     }
 }
 

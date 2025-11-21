@@ -6,20 +6,36 @@ namespace FlowTracer.WebUI.Hubs;
 
 public sealed class TraceHub : Hub
 {
+    private static readonly object _lockObj = new();
+    private static EventHandler<TraceEntry>? _eventHandler;
+    private static IHubContext<TraceHub>? _hubContext;
+
     private readonly TraceCollector _collector;
 
-    public TraceHub(TraceCollector collector)
+    public TraceHub(TraceCollector collector, IHubContext<TraceHub> hubContext)
     {
         _collector = collector;
         
-        // Subscribe to trace events when hub is created
-        _collector.TraceRecorded += OnTraceRecorded;
-    }
-
-    private void OnTraceRecorded(object? sender, TraceEntry trace)
-    {
-        // Broadcast to all connected clients
-        Clients.All.SendAsync("ReceiveTrace", trace).ConfigureAwait(false);
+        // Initialize event handler only once using thread-safe pattern
+        lock (_lockObj)
+        {
+            if (_eventHandler == null && _hubContext == null)
+            {
+                _hubContext = hubContext;
+                _eventHandler = async (sender, trace) =>
+                {
+                    try
+                    {
+                        await _hubContext.Clients.All.SendAsync("ReceiveTrace", trace);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"⚠️  Failed to broadcast trace: {ex.Message}");
+                    }
+                };
+                _collector.TraceRecorded += _eventHandler;
+            }
+        }
     }
 
     public override Task OnConnectedAsync()
@@ -32,14 +48,5 @@ public sealed class TraceHub : Hub
     {
         Console.WriteLine($"🔌 Dashboard client disconnected: {Context.ConnectionId}");
         return base.OnDisconnectedAsync(exception);
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            _collector.TraceRecorded -= OnTraceRecorded;
-        }
-        base.Dispose(disposing);
     }
 }

@@ -52,7 +52,7 @@ public sealed class DashboardServer : IDisposable
                 {
                     options.AddDefaultPolicy(policy =>
                     {
-                        policy.AllowAnyOrigin()
+                        policy.WithOrigins("http://localhost", "https://localhost")
                               .AllowAnyMethod()
                               .AllowAnyHeader();
                     });
