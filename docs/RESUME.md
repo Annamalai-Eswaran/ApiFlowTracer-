@@ -1,6 +1,6 @@
 # ANNAMALAI ESWARAN A
 
-Chennai, Tamil Nadu | +91 9943902834 | annamalaideveloper@gmail.com | [LinkedIn](https://linkedin.com/in/your-profile) | [GitHub](https://github.com/Annamalai-Eswaran)
+Chennai, Tamil Nadu | +91 9943902834 | annamalaideveloper@gmail.com | [LinkedIn](https://linkedin.com/in/ADD-YOUR-LINKEDIN-USERNAME) | [GitHub](https://github.com/Annamalai-Eswaran)
 
 ---
 
@@ -88,7 +88,7 @@ Full Stack Engineer with 1.5+ years of professional experience building high-per
 
 ## CERTIFICATIONS
 
-- **Java Certification (HackerRank):** Demonstrated proficiency in Java programming and problem-solving. [Certificate Link]
+- **Java Certification (HackerRank):** Demonstrated proficiency in Java programming and problem-solving. *(Add your certificate URL here)*
 - **NPTEL – Internet of Things (IIT Madras):** Completed a 12-week certified course on IoT protocols and applications.
 - **TCS iON – Soft Skills:** Enhanced communication, teamwork, and leadership capabilities.
 - *(Recommended: AZ-900 Azure Fundamentals – In Progress)*
